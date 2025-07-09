@@ -103,7 +103,8 @@ io.on('connection', (socket) => {
   });
 });
 
-http.listen(3000, () => console.log('API & signaling running on http://10.236.159.54:3000'));
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => console.log(`API & signaling server running on port ${PORT}`));
 
 // Get user profile by ID (authentication via token recommended)
 app.get('/profile/:id', async (req, res) => {
