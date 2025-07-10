@@ -166,11 +166,8 @@ io.on('connection', (socket) => {
 
 
 
-const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || '0.0.0.0';
-http.listen(PORT, HOST, () => {
-  console.log(`Server listening on http://${HOST}:${PORT}`);
-});
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => console.log(`API & signaling server running on port ${PORT}`));
 
 // Get user profile by ID (authentication via token recommended)
 app.get('/profile/:id', async (req, res) => {
