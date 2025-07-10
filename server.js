@@ -8,16 +8,36 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const db = mysql.createPool({
-  host: 'localhost',
-  user: 'root',
-  password: '', // your mysql root password
-  database: 'call-app'
+console.log('Connecting to MySQL with:', {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'call-app'
 });
+const db = mysql.createPool({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'call-app'
+});
+// Test DB connection on startup
+(async () => {
+  try {
+    await db.query('SELECT 1');
+    console.log('MySQL connection successful.');
+  } catch (err) {
+    console.error('MySQL connection failed:', err);
+  }
+})();
 
-const JWT_SECRET = 'your_secret_key';
+const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
 // Signup
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] Incoming request: ${req.method} ${req.url}`);
+  next();
+});
+
 app.post('/register', async (req, res) => {
   const { name, email, password, avatar } = req.body;
   if (!(name && email && password)) return res.json({ success: false, message: 'Missing fields' });
@@ -71,7 +91,7 @@ const http = require('http').createServer(app);
 const { Server } = require('socket.io');
 const io = new Server(http, {
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST']
   }
 });
@@ -81,30 +101,76 @@ const rooms = {};
 
 io.on('connection', (socket) => {
   socket.on('join-room', (roomId) => {
+    socket.roomId = roomId;
     if (!rooms[roomId]) rooms[roomId] = [];
-    if (rooms[roomId].length >= 2) {
+    if (!rooms[roomId].includes(socket.id)) {
+      rooms[roomId].push(socket.id);
+    }
+
+    socket.join(roomId);
+    socket.emit('joined-room', roomId);
+
+    // Notify others only if this is a second user
+    if (rooms[roomId].length > 1) {
+      socket.to(roomId).emit('peer-joined', socket.id);
+    }
+    console.log(`[Socket] ${socket.id} joined room ${roomId}`);
+    // inside 'join-room'
+    if (rooms[roomId].length > 2) {
       socket.emit('room-full');
       return;
     }
-    rooms[roomId].push(socket.id);
-    socket.join(roomId);
-    socket.emit('joined-room', roomId);
-    socket.to(roomId).emit('peer-joined', socket.id);
+  });
 
-    socket.on('signal', ({ to, data }) => {
-      io.to(to).emit('signal', { from: socket.id, data });
-    });
-
-    socket.on('disconnect', () => {
-      rooms[roomId] = (rooms[roomId] || []).filter(id => id !== socket.id);
+  socket.on('leave-room', (roomId) => {
+    console.log(`[Socket] ${socket.id} manually left room ${roomId}`);
+    socket.leave(roomId);
+    if (rooms[roomId]) {
+      rooms[roomId] = rooms[roomId].filter(id => id !== socket.id);
       socket.to(roomId).emit('peer-left', socket.id);
-      if (rooms[roomId] && rooms[roomId].length === 0) delete rooms[roomId];
-    });
+
+      if (rooms[roomId].length === 0) {
+        delete rooms[roomId];
+      }
+    }
+  });
+
+  socket.on('disconnect', () => {
+    const roomId = socket.roomId;
+    if (roomId && rooms[roomId]) {
+      rooms[roomId] = rooms[roomId].filter(id => id !== socket.id);
+      socket.to(roomId).emit('peer-left', socket.id);
+
+      if (rooms[roomId].length === 0) {
+        delete rooms[roomId];
+      }
+
+      console.log(`[Socket] ${socket.id} disconnected from room ${roomId}`);
+    }
+  });
+
+  socket.on('signal', ({ to, data }) => {
+    io.to(to).emit('signal', { from: socket.id, data });
+  });
+
+  socket.on('reject-call', (roomId) => {
+    socket.to(roomId).emit('call-rejected');
+  });
+
+  socket.on('hangup-call', (roomId) => {
+    socket.to(roomId).emit('peer-left');   // reuse existing listener
   });
 });
 
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => console.log(`API & signaling server running on port ${PORT}`));
+
+
+
+
+const PORT = process.env.PORT || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
+http.listen(PORT, HOST, () => {
+  console.log(`Server listening on http://${HOST}:${PORT}`);
+});
 
 // Get user profile by ID (authentication via token recommended)
 app.get('/profile/:id', async (req, res) => {
