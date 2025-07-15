@@ -101,10 +101,12 @@ const rooms = {};
 
 io.on('connection', (socket) => {
   socket.on('join-room', (roomId) => {
+    console.log(`[Socket] Attempting to join room ${roomId} by ${socket.id}`);
     socket.roomId = roomId;
 
     // Check if the room is full before joining
     if (rooms[roomId] && rooms[roomId].length >= 2) {
+      console.log(`[Socket] Room ${roomId} is full. Rejecting ${socket.id}`);
       socket.emit('room-full');
       return; // Prevent joining
     }
@@ -121,7 +123,7 @@ io.on('connection', (socket) => {
     if (rooms[roomId].length > 1) {
       socket.to(roomId).emit('peer-joined', socket.id);
     }
-    console.log(`[Socket] ${socket.id} joined room ${roomId}`);
+    console.log(`[Socket] ${socket.id} joined room ${roomId}. Room state:`, rooms[roomId]);
   });
 
   socket.on('leave-room', (roomId) => {
@@ -140,10 +142,12 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
+      console.log(`[Socket] ${socket.id} disconnecting from room ${roomId}.`);
       rooms[roomId] = rooms[roomId].filter(id => id !== socket.id);
       socket.to(roomId).emit('peer-left', socket.id);
 
       if (rooms[roomId].length === 0) {
+        console.log(`[Socket] Room ${roomId} is now empty. Deleting.`);
         delete rooms[roomId];
       }
 
