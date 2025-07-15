@@ -93,7 +93,9 @@ const io = new Server(http, {
   cors: {
     origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST']
-  }
+  },
+  pingInterval: 25000, // 25 seconds
+  pingTimeout: 60000,  // 60 seconds
 });
 
 // WebRTC signaling logic
