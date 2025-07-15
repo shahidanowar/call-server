@@ -102,6 +102,13 @@ const rooms = {};
 io.on('connection', (socket) => {
   socket.on('join-room', (roomId) => {
     socket.roomId = roomId;
+
+    // Check if the room is full before joining
+    if (rooms[roomId] && rooms[roomId].length >= 2) {
+      socket.emit('room-full');
+      return; // Prevent joining
+    }
+
     if (!rooms[roomId]) rooms[roomId] = [];
     if (!rooms[roomId].includes(socket.id)) {
       rooms[roomId].push(socket.id);
@@ -115,11 +122,6 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('peer-joined', socket.id);
     }
     console.log(`[Socket] ${socket.id} joined room ${roomId}`);
-    // inside 'join-room'
-    if (rooms[roomId].length > 2) {
-      socket.emit('room-full');
-      return;
-    }
   });
 
   socket.on('leave-room', (roomId) => {
@@ -161,10 +163,6 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('peer-left');   // reuse existing listener
   });
 });
-
-
-
-
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => console.log(`API & signaling server running on port ${PORT}`));
