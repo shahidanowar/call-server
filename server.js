@@ -143,15 +143,18 @@ io.on('connection', (socket) => {
     const roomId = socket.roomId;
     if (roomId && rooms[roomId]) {
       console.log(`[Socket] ${socket.id} disconnecting from room ${roomId}.`);
+      const wasInRoom = rooms[roomId].includes(socket.id);
       rooms[roomId] = rooms[roomId].filter(id => id !== socket.id);
-      socket.to(roomId).emit('peer-left', socket.id);
+
+      // Only notify if the user was actually in the room
+      if (wasInRoom) {
+        socket.to(roomId).emit('peer-left', socket.id);
+      }
 
       if (rooms[roomId].length === 0) {
         console.log(`[Socket] Room ${roomId} is now empty. Deleting.`);
         delete rooms[roomId];
       }
-
-      console.log(`[Socket] ${socket.id} disconnected from room ${roomId}`);
     }
   });
 
