@@ -11,13 +11,13 @@ app.use(express.json());
 console.log('Connecting to MySQL with:', {
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
+  password: process.env.DB_PASSWORD || 'Shahid123*',
   database: process.env.DB_NAME || 'call-app'
 });
 const db = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
+  password: process.env.DB_PASSWORD || 'Shahid123*',
   database: process.env.DB_NAME || 'call-app'
 });
 // Test DB connection on startup
@@ -188,6 +188,105 @@ app.get('/profile/:id', async (req, res) => {
     res.json({ success: true, user: rows[0] });
   } catch (err) {
     console.error('Profile fetch error:', err);
+    res.json({ success: false, message: 'Server error' });
+  }
+});
+
+// Save push token
+app.post('/push-token', async (req, res) => {
+  const { userId, pushToken } = req.body;
+  if (!userId || !pushToken) {
+    return res.json({ success: false, message: 'Missing userId or pushToken' });
+  }
+  
+  try {
+    // Update or insert push token for user
+    await db.query(
+      'UPDATE users SET push_token = ? WHERE id = ?',
+      [pushToken, userId]
+    );
+    res.json({ success: true, message: 'Push token saved' });
+  } catch (err) {
+    console.error('Push token save error:', err);
+    res.json({ success: false, message: 'Server error' });
+  }
+});
+
+// Send call push notification
+app.post('/send-call-push', async (req, res) => {
+  const { toUserId, roomId, callerName } = req.body;
+  if (!toUserId || !roomId || !callerName) {
+    return res.json({ success: false, message: 'Missing required fields' });
+  }
+  
+  try {
+    // Get the recipient's push token
+    const [rows] = await db.query(
+      'SELECT push_token FROM users WHERE id = ?',
+      [toUserId]
+    );
+    
+    if (!rows.length || !rows[0].push_token) {
+      return res.json({ success: false, message: 'User not found or no push token' });
+    }
+    
+    const pushToken = rows[0].push_token;
+    
+    // Send push notification using Expo's push service
+    const message = {
+      to: pushToken,
+      title: 'Incoming Call',
+      body: `${callerName} is calling...`,
+      priority: 'high',
+      // Use the category identifier defined in the mobile app
+      categoryId: 'incoming_call',
+      // The data payload to be used by the app
+      data: {
+        type: 'incoming_call',
+        roomId: roomId,
+        callerName: callerName
+      },
+      // Android-specific settings for a full-screen call notification
+      android: {
+        channelId: 'incoming_calls', // Must match the channel ID created in the app
+        sticky: true, // Makes the notification persistent until dismissed
+        fullScreenIntent: true, // Displays the notification as a full-screen activity
+      },
+    };
+    
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(message),
+    });
+    
+    const result = await response.json();
+    console.log('Push notification result:', result);
+    
+    res.json({ success: true, message: 'Push notification sent', result });
+  } catch (err) {
+    console.error('Send push error:', err);
+    res.json({ success: false, message: 'Server error' });
+  }
+});
+
+// Reject call endpoint
+app.post('/reject-call', async (req, res) => {
+  const { roomId } = req.body;
+  if (!roomId) {
+    return res.json({ success: false, message: 'Missing roomId' });
+  }
+  
+  try {
+    // Emit reject-call to all sockets in the room
+    io.to(roomId).emit('call-rejected');
+    res.json({ success: true, message: 'Call rejected' });
+  } catch (err) {
+    console.error('Reject call error:', err);
     res.json({ success: false, message: 'Server error' });
   }
 });
