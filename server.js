@@ -214,6 +214,7 @@ app.post('/push-token', async (req, res) => {
 
 // Send call push notification
 app.post('/send-call-push', async (req, res) => {
+  console.log(`[Push] Received request to /send-call-push with body:`, req.body);
   const { toUserId, roomId, callerName } = req.body;
   if (!toUserId || !roomId || !callerName) {
     return res.json({ success: false, message: 'Missing required fields' });
